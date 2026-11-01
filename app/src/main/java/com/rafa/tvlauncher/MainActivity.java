@@ -42,6 +42,13 @@ import android.widget.TextClock;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import android.content.BroadcastReceiver;
+import android.content.IntentFilter;
+import android.graphics.BitmapFactory;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.TransitionDrawable;
+import android.os.Build;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
@@ -84,6 +91,18 @@ public class MainActivity extends Activity {
     private Typeface fThin, fLight, fReg;
     private String builtKey = "";
     private boolean resumed;
+    private boolean wallpaperEnabled;
+    private int wallpaperMinutes = 60;
+    private int wallpaperIdx = -1;
+    private ImageView wallpaperView;
+    private Drawable wallpaperCur;
+    private final List<String> wallpaperFiles = new ArrayList<>();
+    private final BroadcastReceiver tick = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context c, Intent i) {
+            applyWallpaper(true);
+        }
+    };
     private LinearLayout dropdown;
     private View dropdownOwner;
 
@@ -105,6 +124,16 @@ public class MainActivity extends Activity {
         fThin = loadFont(200);
         fLight = loadFont(300);
         fReg = loadFont(400);
+        wallpaperEnabled = getResources().getBoolean(R.bool.wallpaper_enabled);
+        wallpaperMinutes = getResources().getInteger(R.integer.wallpaper_rotation_minutes);
+        try {
+            String[] f = getAssets().list("wallpapers");
+            if (f != null) {
+                java.util.Arrays.sort(f);
+                wallpaperFiles.addAll(java.util.Arrays.asList(f));
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     @Override
@@ -125,11 +154,18 @@ public class MainActivity extends Activity {
             });
         }
         refreshStatus();
+        applyWallpaper(true);
+        // aviso del sistema una vez por minuto: sin temporizadores ni sondeos propios
+        registerReceiver(tick, new IntentFilter(Intent.ACTION_TIME_TICK));
     }
 
     @Override
     protected void onPause() {
         resumed = false;
+        try {
+            unregisterReceiver(tick);
+        } catch (IllegalArgumentException ignored) {
+        }
         super.onPause();
     }
 
@@ -251,6 +287,7 @@ public class MainActivity extends Activity {
         t.setTextColor(color);
         t.setSingleLine(true);
         t.setIncludeFontPadding(false);
+        shade(t);
         return t;
     }
 
@@ -277,13 +314,27 @@ public class MainActivity extends Activity {
         List<AppEntry> grid = new ArrayList<>();
         for (AppEntry e : all) if (!dockSet.contains(e.pkg)) grid.add(e);
 
-        int padV = (int) (tileH * 0.30f);
+        int padV = (int) (tileH * 0.26f);
         int bandH = tileH + 2 * padV;
-        int headerH = (int) (H * 0.44f);
+        int headerH = (int) (H * 0.265f);
         ringGap = Math.max(4, (int) (tileW * 0.03f));
 
         root = new FrameLayout(this);
         root.setBackgroundColor(getResources().getColor(R.color.bg, getTheme()));
+
+        wallpaperIdx = -1;
+        wallpaperCur = null;
+        wallpaperView = null;
+        if (wallpaperEnabled && !wallpaperFiles.isEmpty()) {
+            wallpaperView = new ImageView(this);
+            wallpaperView.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            root.addView(wallpaperView, new FrameLayout.LayoutParams(-1, -1));
+            // sombra suave arriba (reloj) y abajo (etiquetas) para que el texto se lea sobre cualquier fondo
+            View scrim = new View(this);
+            scrim.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                    new int[]{0x66000000, 0x00000000, 0x00000000, 0xB0000000}));
+            root.addView(scrim, new FrameLayout.LayoutParams(-1, -1));
+        }
 
         scroll = new ScrollView(this);
         scroll.setVerticalScrollBarEnabled(false);
@@ -333,27 +384,42 @@ public class MainActivity extends Activity {
 
         LinearLayout left = new LinearLayout(this);
         left.setOrientation(LinearLayout.VERTICAL);
-        greeting = text("", H * 0.034f, fReg, 0xCCFFFFFF);
+        greeting = text("", H * 0.024f, fReg, 0xCCFFFFFF);
+        greeting.setLetterSpacing(0.18f);
         left.addView(greeting);
+        LinearLayout timeRow = new LinearLayout(this);
+        timeRow.setOrientation(LinearLayout.HORIZONTAL);
+        timeRow.setGravity(Gravity.CENTER_VERTICAL);
         TextClock clock = new TextClock(this);
         clock.setFormat24Hour("HH:mm");
         clock.setFormat12Hour("HH:mm");
-        clock.setTextSize(TypedValue.COMPLEX_UNIT_PX, H * 0.15f);
+        clock.setTextSize(TypedValue.COMPLEX_UNIT_PX, H * 0.105f);
         clock.setTypeface(fThin);
         clock.setTextColor(Color.WHITE);
         clock.setIncludeFontPadding(false);
-        left.addView(clock);
+        shade(clock);
+        timeRow.addView(clock);
+        View divider = new View(this);
+        divider.setBackgroundColor(0x55FFFFFF);
+        LinearLayout.LayoutParams dvl = new LinearLayout.LayoutParams(Math.max(2, W / 960), (int) (H * 0.05f));
+        dvl.leftMargin = (int) (W * 0.014f);
+        dvl.rightMargin = (int) (W * 0.014f);
+        timeRow.addView(divider, dvl);
         TextClock date = new TextClock(this);
         date.setFormat24Hour("EEEE d 'de' MMMM");
         date.setFormat12Hour("EEEE d 'de' MMMM");
-        date.setTextSize(TypedValue.COMPLEX_UNIT_PX, H * 0.034f);
+        date.setTextSize(TypedValue.COMPLEX_UNIT_PX, H * 0.024f);
         date.setTypeface(fReg);
-        date.setTextColor(0x99FFFFFF);
+        date.setTextColor(0xCCFFFFFF);
+        date.setLetterSpacing(0.12f);
+        if (Build.VERSION.SDK_INT >= 28) date.setAllCaps(true);
         date.setIncludeFontPadding(false);
-        left.addView(date);
+        shade(date);
+        timeRow.addView(date);
+        left.addView(timeRow);
         FrameLayout.LayoutParams llp = new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.START);
         llp.leftMargin = margin + pad;
-        llp.topMargin = (int) (H * 0.06f);
+        llp.topMargin = (int) (H * 0.05f);
         header.addView(left, llp);
 
         LinearLayout pillRow = new LinearLayout(this);
@@ -402,7 +468,7 @@ public class MainActivity extends Activity {
         band.setOrientation(LinearLayout.HORIZONTAL);
         band.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
         band.setPadding(pad, 0, pad, 0);
-        band.setBackground(rounded(0xFF161618, bandH * 0.26f));
+        band.setBackground(rounded(wallpaperEnabled ? 0xB8121214 : 0xFF161618, bandH * 0.26f));
         LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(W - 2 * margin, bandH);
         blp.leftMargin = margin;
         column.addView(band, blp);
@@ -414,16 +480,16 @@ public class MainActivity extends Activity {
             dockTiles.add(t);
         }
 
-        // la cuadricula arranca bajo el borde de la pantalla: vista limpia hasta que se pulsa Abajo
-        int belowDock = Math.max((int) (H * 0.10f), H - headerH - bandH + (int) (H * 0.02f));
+        // hueco para la etiqueta de la app seleccionada; la cuadricula queda a la vista justo debajo
+        int belowDock = (int) (H * 0.085f);
         column.addView(new View(this), new LinearLayout.LayoutParams(W, belowDock));
 
         // ---- cuadricula
         int rowH = tileH + labelH;
-        int rowGap = (int) (H * 0.045f);
+        int rowGap = (int) (H * 0.03f);
         LinearLayout gridBox = new LinearLayout(this);
         gridBox.setOrientation(LinearLayout.VERTICAL);
-        gridBox.setPadding(margin + pad, (int) (H * 0.03f), 0, 0);
+        gridBox.setPadding(margin + pad, 0, 0, 0);
         column.addView(gridBox, new LinearLayout.LayoutParams(W, ViewGroup.LayoutParams.WRAP_CONTENT));
         LinearLayout row = null;
         for (int i = 0; i < grid.size(); i++) {
@@ -440,10 +506,11 @@ public class MainActivity extends Activity {
             row.addView(t, l);
             gridTiles.add(t);
         }
-        column.addView(new View(this), new LinearLayout.LayoutParams(W, (int) (H * 0.6f)));
+        column.addView(new View(this), new LinearLayout.LayoutParams(W, (int) (H * 0.06f)));
 
         wireFocus();
         setContentView(root);
+        applyWallpaper(false);
     }
 
     private View makePill(String label) {
@@ -496,10 +563,10 @@ public class MainActivity extends Activity {
 
         final TextView lab;
         if (!dock) {
-            lab = text(e.label, H * 0.028f, fReg, Color.WHITE);
-            lab.setGravity(Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM);
+            lab = text(e.label, H * 0.026f, fReg, 0xA6FFFFFF);
+            lab.setGravity(Gravity.CENTER_HORIZONTAL | Gravity.TOP);
+            lab.setPadding(0, (int) (H * 0.012f), 0, 0);
             lab.setEllipsize(android.text.TextUtils.TruncateAt.END);
-            lab.setVisibility(View.INVISIBLE);
             t.addView(lab, new LinearLayout.LayoutParams(tileW, labelH));
         } else {
             lab = null;
@@ -516,7 +583,7 @@ public class MainActivity extends Activity {
             public void onFocusChange(View v, boolean has) {
                 float s = has ? FOCUS_SCALE : 1f;
                 v.animate().scaleX(s).scaleY(s).setDuration(150).start();
-                if (lab != null) lab.setVisibility(has ? View.VISIBLE : View.INVISIBLE);
+                if (lab != null) lab.setTextColor(has ? Color.WHITE : 0xA6FFFFFF);
                 if (!has) return;
                 moveHighlight(v);
                 if (dock) {
@@ -525,7 +592,7 @@ public class MainActivity extends Activity {
                     scroll.smoothScrollTo(0, 0);
                 } else {
                     int[] o = offset(v);
-                    scroll.smoothScrollTo(0, Math.max(0, o[1] - (int) (H * 0.18f)));
+                    ensureVisible(o[1], v.getHeight());
                 }
                 prefs.edit().putString("last", (dock ? "dock:" : "grid:") + idx).apply();
             }
@@ -577,8 +644,73 @@ public class MainActivity extends Activity {
     /** Tres paradas: color pleno en el centro, 35 % a medio radio y transparente en el borde. */
     private void applyGlow(int c) {
         int rgb = c & 0x00FFFFFF;
-        int mid = rgb | (((int) (Color.alpha(c) * 0.35f)) << 24);
-        glowDrawable.setColors(new int[]{c, mid, rgb});
+        int a = (int) (Color.alpha(c) * (wallpaperEnabled ? 0.45f : 1f));
+        int mid = rgb | (((int) (a * 0.35f)) << 24);
+        glowDrawable.setColors(new int[]{rgb | (a << 24), mid, rgb});
+    }
+
+    private void shade(TextView t) {
+        t.setShadowLayer(H * 0.006f, 0, H * 0.002f, 0x73000000);
+    }
+
+    /** Desplaza lo minimo para que la fila enfocada quede entera a la vista. */
+    private void ensureVisible(int top, int h) {
+        int sy = scroll.getScrollY();
+        int topMargin = (int) (H * 0.06f);
+        int bottomMargin = (int) (H * 0.05f);
+        int target = sy;
+        if (top + h + bottomMargin > sy + H) {
+            target = top + h + bottomMargin - H;
+        } else if (top - topMargin < sy) {
+            target = Math.max(0, top - topMargin);
+        }
+        if (target != sy) scroll.smoothScrollTo(0, target);
+    }
+
+    // ------------------------------------------------------------ fondos
+
+    private int wallpaperIndex() {
+        if (wallpaperFiles.isEmpty()) return -1;
+        long slot = System.currentTimeMillis() / (Math.max(1, wallpaperMinutes) * 60000L);
+        return (int) (slot % wallpaperFiles.size());
+    }
+
+    private Drawable loadWallpaper(int idx) {
+        try (InputStream in = getAssets().open("wallpapers/" + wallpaperFiles.get(idx))) {
+            BitmapFactory.Options o = new BitmapFactory.Options();
+            o.inPreferredConfig = Bitmap.Config.ARGB_8888;
+            Bitmap b = BitmapFactory.decodeStream(in, null, o);
+            return b == null ? null : new BitmapDrawable(getResources(), b);
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    /** Cambia el fondo si toca por hora; con animate funde del anterior al nuevo. */
+    private void applyWallpaper(boolean animate) {
+        if (wallpaperView == null) return;
+        final int idx = wallpaperIndex();
+        if (idx < 0 || idx == wallpaperIdx) return;
+        final Drawable d = loadWallpaper(idx);
+        if (d == null) return;
+        Drawable old = wallpaperCur;
+        wallpaperIdx = idx;
+        wallpaperCur = d;
+        if (animate && old != null) {
+            TransitionDrawable td = new TransitionDrawable(new Drawable[]{old, d});
+            td.setCrossFadeEnabled(true);
+            wallpaperView.setImageDrawable(td);
+            td.startTransition(900);
+            // al terminar se deja solo el nuevo, para que no se acumulen imagenes en memoria
+            wallpaperView.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    if (wallpaperCur == d && wallpaperView != null) wallpaperView.setImageDrawable(d);
+                }
+            }, 1000);
+        } else {
+            wallpaperView.setImageDrawable(d);
+        }
     }
 
     /** Etiqueta del dock centrada bajo el icono seleccionado. */
@@ -704,7 +836,8 @@ public class MainActivity extends Activity {
     private void refreshStatus() {
         int h = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
         if (greeting != null) {
-            greeting.setText(h < 6 ? "Buenas noches" : h < 13 ? "Buenos días" : h < 21 ? "Buenas tardes" : "Buenas noches");
+            String g = h < 6 ? "Buenas noches" : h < 13 ? "Buenos días" : h < 21 ? "Buenas tardes" : "Buenas noches";
+            greeting.setText(g.toUpperCase(new java.util.Locale("es", "ES")));
         }
         if (netPill != null) netPill.setText(networkLabel());
     }

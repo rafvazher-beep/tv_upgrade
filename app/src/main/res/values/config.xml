@@ -3,6 +3,11 @@
     <!-- Huecos del dock y columnas de la cuadricula (4, 5, 6 o 7) -->
     <integer name="columns">7</integer>
 
+    <!-- Fondos de pantalla (carpeta assets/wallpapers). Rotacion en minutos: cambia solo,
+         sin temporizadores propios, y funde de uno a otro. false = fondo negro liso. -->
+    <bool name="wallpaper_enabled">true</bool>
+    <integer name="wallpaper_rotation_minutes">60</integer>
+
     <!-- Apps del dock, en orden. Si una no esta instalada se omite. -->
     <string-array name="dock_apps">
         <item>com.netflix.ninja</item>

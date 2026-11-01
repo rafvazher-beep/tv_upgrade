@@ -32,6 +32,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
+import android.view.animation.DecelerateInterpolator;
 import android.view.animation.OvershootInterpolator;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -70,7 +71,9 @@ public class MainActivity extends Activity {
     private ScrollView scroll;
     private FrameLayout content;
     private View highlight;
-    private boolean highlightPlaced;
+    private static final float FOCUS_SCALE = 1.08f;
+    private boolean highlightPlaced, labelPlaced;
+    private int ringGap;
     private TextView dockTitle, greeting, netPill;
     private GradientDrawable glowDrawable;
     private int glowCur = 0;
@@ -256,6 +259,7 @@ public class MainActivity extends Activity {
         dockTiles.clear();
         gridTiles.clear();
         highlightPlaced = false;
+        labelPlaced = false;
         dropdown = null;
 
         String[] dockPk = getResources().getStringArray(R.array.dock_apps);
@@ -273,11 +277,10 @@ public class MainActivity extends Activity {
         List<AppEntry> grid = new ArrayList<>();
         for (AppEntry e : all) if (!dockSet.contains(e.pkg)) grid.add(e);
 
-        int padV = (int) (tileH * 0.22f);
+        int padV = (int) (tileH * 0.30f);
         int bandH = tileH + 2 * padV;
-        int titleH = (int) (H * 0.10f);
-        int bottomGap = (int) (H * 0.05f);
-        int headerH = H - bottomGap - bandH - titleH;
+        int headerH = (int) (H * 0.44f);
+        ringGap = Math.max(4, (int) (tileW * 0.03f));
 
         root = new FrameLayout(this);
         root.setBackgroundColor(getResources().getColor(R.color.bg, getTheme()));
@@ -295,27 +298,34 @@ public class MainActivity extends Activity {
         View glow = new View(this);
         glowDrawable = new GradientDrawable();
         glowDrawable.setGradientType(GradientDrawable.RADIAL_GRADIENT);
-        glowDrawable.setGradientRadius(W * 0.30f);
+        // vista cuadrada del tamano exacto del radio: el degradado llega a 0 antes del borde, sin recortes
+        int glowR = (int) (W * 0.34f);
+        glowDrawable.setGradientRadius(glowR);
         glowDrawable.setGradientCenter(0.5f, 0.5f);
-        glowDrawable.setColors(new int[]{glowCur, glowCur & 0x00FFFFFF});
+        applyGlow(glowCur);
         glow.setBackground(glowDrawable);
-        int glowH = (int) (H * 0.55f);
-        FrameLayout.LayoutParams glp = new FrameLayout.LayoutParams((int) (W * 0.7f), glowH);
-        glp.leftMargin = -(int) (W * 0.05f);
-        glp.topMargin = headerH + titleH / 2 - glowH / 2;
+        FrameLayout.LayoutParams glp = new FrameLayout.LayoutParams(2 * glowR, 2 * glowR);
+        glp.leftMargin = W / 2 - glowR;
+        glp.topMargin = headerH + bandH / 2 - glowR - (int) (H * 0.05f);
         content.addView(glow, glp);
 
         // un unico resaltado de cristal que se desplaza entre tiles
         highlight = new View(this);
-        GradientDrawable hd = rounded(0x38FFFFFF, tileH * 0.2f);
-        hd.setStroke(Math.max(2, W / 900), 0x66FFFFFF);
+        GradientDrawable hd = rounded(0x00000000, tileH * 0.12f * FOCUS_SCALE + ringGap);
+        hd.setStroke(Math.max(3, W / 640), 0xCCFFFFFF);
         highlight.setBackground(hd);
         highlight.setAlpha(0f);
-        content.addView(highlight, new FrameLayout.LayoutParams(1, 1, Gravity.TOP | Gravity.START));
 
         LinearLayout column = new LinearLayout(this);
         column.setOrientation(LinearLayout.VERTICAL);
         content.addView(column, new FrameLayout.LayoutParams(W, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        // marco de cristal y etiqueta por encima de la banda (antes quedaban detras y no se veian)
+        content.addView(highlight, new FrameLayout.LayoutParams(1, 1, Gravity.TOP | Gravity.START));
+        dockTitle = text("", H * 0.04f, fReg, 0xEEFFFFFF);
+        FrameLayout.LayoutParams dlp = new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.START);
+        dlp.topMargin = headerH + bandH + (int) (H * 0.025f);
+        content.addView(dockTitle, dlp);
 
         // ---- cabecera
         FrameLayout header = new FrameLayout(this);
@@ -387,12 +397,6 @@ public class MainActivity extends Activity {
             }
         });
 
-        // ---- titulo del dock
-        dockTitle = text(dock.isEmpty() ? "" : dock.get(0).label, H * 0.062f, fLight, Color.WHITE);
-        dockTitle.setGravity(Gravity.CENTER_VERTICAL);
-        dockTitle.setPadding(margin + pad, 0, 0, 0);
-        column.addView(dockTitle, new LinearLayout.LayoutParams(W, titleH));
-
         // ---- dock
         LinearLayout band = new LinearLayout(this);
         band.setOrientation(LinearLayout.HORIZONTAL);
@@ -410,7 +414,9 @@ public class MainActivity extends Activity {
             dockTiles.add(t);
         }
 
-        column.addView(new View(this), new LinearLayout.LayoutParams(W, bottomGap));
+        // la cuadricula arranca bajo el borde de la pantalla: vista limpia hasta que se pulsa Abajo
+        int belowDock = Math.max((int) (H * 0.10f), H - headerH - bandH + (int) (H * 0.02f));
+        column.addView(new View(this), new LinearLayout.LayoutParams(W, belowDock));
 
         // ---- cuadricula
         int rowH = tileH + labelH;
@@ -508,13 +514,13 @@ public class MainActivity extends Activity {
         t.setOnFocusChangeListener(new View.OnFocusChangeListener() {
             @Override
             public void onFocusChange(View v, boolean has) {
-                float s = has ? 1.1f : 1f;
+                float s = has ? FOCUS_SCALE : 1f;
                 v.animate().scaleX(s).scaleY(s).setDuration(150).start();
                 if (lab != null) lab.setVisibility(has ? View.VISIBLE : View.INVISIBLE);
                 if (!has) return;
                 moveHighlight(v);
                 if (dock) {
-                    dockTitle.setText(e.label);
+                    moveDockLabel(e.label, v);
                     animateGlow(e.glow);
                     scroll.smoothScrollTo(0, 0);
                 } else {
@@ -543,17 +549,20 @@ public class MainActivity extends Activity {
     private void moveHighlight(View tile) {
         if (tile.getWidth() == 0) return;
         int[] o = offset(tile);
-        int p = (int) (tile.getWidth() * 0.08f);
-        int w = tile.getWidth() + 2 * p;
-        int h = tile.getHeight() + 2 * p;
+        int w = (int) (tileW * FOCUS_SCALE) + 2 * ringGap;
+        int h = (int) (tileH * FOCUS_SCALE) + 2 * ringGap;
         FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) highlight.getLayoutParams();
         if (lp.width != w || lp.height != h) {
             lp.width = w;
             lp.height = h;
             highlight.setLayoutParams(lp);
         }
-        float tx = o[0] - p;
-        float ty = o[1] - p;
+        // el tile crece desde su centro; el marco rodea la imagen ya ampliada
+        float cx = o[0] + tile.getWidth() / 2f;
+        float hh = tile.getHeight();
+        float cy = o[1] + hh / 2f + (tileH / 2f - hh / 2f) * FOCUS_SCALE;
+        float tx = cx - w / 2f;
+        float ty = cy - h / 2f;
         if (!highlightPlaced) {
             highlight.setTranslationX(tx);
             highlight.setTranslationY(ty);
@@ -565,6 +574,31 @@ public class MainActivity extends Activity {
         }
     }
 
+    /** Tres paradas: color pleno en el centro, 35 % a medio radio y transparente en el borde. */
+    private void applyGlow(int c) {
+        int rgb = c & 0x00FFFFFF;
+        int mid = rgb | (((int) (Color.alpha(c) * 0.35f)) << 24);
+        glowDrawable.setColors(new int[]{c, mid, rgb});
+    }
+
+    /** Etiqueta del dock centrada bajo el icono seleccionado. */
+    private void moveDockLabel(String s, View tile) {
+        dockTitle.setText(s);
+        if (tile.getWidth() == 0) return;
+        dockTitle.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
+        int w = dockTitle.getMeasuredWidth();
+        int[] o = offset(tile);
+        float cx = o[0] + tile.getWidth() / 2f;
+        float tx = Math.max(margin, Math.min(W - margin - w, cx - w / 2f));
+        if (!labelPlaced) {
+            dockTitle.setTranslationX(tx);
+            labelPlaced = true;
+        } else {
+            dockTitle.animate().translationX(tx).setDuration(250)
+                    .setInterpolator(new DecelerateInterpolator(1.5f)).start();
+        }
+    }
+
     private void animateGlow(int target) {
         if (glowAnim != null) glowAnim.cancel();
         glowAnim = ValueAnimator.ofObject(new ArgbEvaluator(), glowCur, target);
@@ -573,7 +607,7 @@ public class MainActivity extends Activity {
             @Override
             public void onAnimationUpdate(ValueAnimator a) {
                 glowCur = (Integer) a.getAnimatedValue();
-                glowDrawable.setColors(new int[]{glowCur, glowCur & 0x00FFFFFF});
+                applyGlow(glowCur);
             }
         });
         glowAnim.start();

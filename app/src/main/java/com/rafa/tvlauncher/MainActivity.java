@@ -316,7 +316,7 @@ public class MainActivity extends Activity {
 
         int padV = (int) (tileH * 0.26f);
         int bandH = tileH + 2 * padV;
-        int headerH = (int) (H * 0.265f);
+        int headerH = (int) (H * 0.30f);
         ringGap = Math.max(4, (int) (tileW * 0.03f));
 
         root = new FrameLayout(this);
@@ -343,6 +343,7 @@ public class MainActivity extends Activity {
         root.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
 
         content = new FrameLayout(this);
+        content.setClipChildren(false);
         scroll.addView(content, new ViewGroup.LayoutParams(W, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         // brillo ambiental detras del titulo del dock
@@ -369,6 +370,7 @@ public class MainActivity extends Activity {
 
         LinearLayout column = new LinearLayout(this);
         column.setOrientation(LinearLayout.VERTICAL);
+        column.setClipChildren(false);
         content.addView(column, new FrameLayout.LayoutParams(W, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         // marco de cristal y etiqueta por encima de la banda (antes quedaban detras y no se veian)
@@ -377,9 +379,12 @@ public class MainActivity extends Activity {
         FrameLayout.LayoutParams dlp = new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.START);
         dlp.topMargin = headerH + bandH + (int) (H * 0.025f);
         content.addView(dockTitle, dlp);
+        // los logos del dock ya llevan el nombre; con la cuadricula debajo la etiqueta se confundia con ella
+        dockTitle.setVisibility(View.GONE);
 
         // ---- cabecera
         FrameLayout header = new FrameLayout(this);
+        header.setClipChildren(false);
         column.addView(header, new LinearLayout.LayoutParams(W, headerH));
 
         LinearLayout left = new LinearLayout(this);
@@ -424,6 +429,7 @@ public class MainActivity extends Activity {
 
         LinearLayout pillRow = new LinearLayout(this);
         pillRow.setOrientation(LinearLayout.HORIZONTAL);
+        pillRow.setClipChildren(false);
         FrameLayout.LayoutParams plp = new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.END);
         plp.rightMargin = margin;
         plp.topMargin = (int) (H * 0.06f);
@@ -466,6 +472,7 @@ public class MainActivity extends Activity {
         // ---- dock
         LinearLayout band = new LinearLayout(this);
         band.setOrientation(LinearLayout.HORIZONTAL);
+        band.setClipChildren(false);
         band.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
         band.setPadding(pad, 0, pad, 0);
         band.setBackground(rounded(wallpaperEnabled ? 0xB8121214 : 0xFF161618, bandH * 0.26f));
@@ -481,7 +488,7 @@ public class MainActivity extends Activity {
         }
 
         // hueco para la etiqueta de la app seleccionada; la cuadricula queda a la vista justo debajo
-        int belowDock = (int) (H * 0.085f);
+        int belowDock = (int) (H * 0.05f);
         column.addView(new View(this), new LinearLayout.LayoutParams(W, belowDock));
 
         // ---- cuadricula
@@ -489,6 +496,7 @@ public class MainActivity extends Activity {
         int rowGap = (int) (H * 0.03f);
         LinearLayout gridBox = new LinearLayout(this);
         gridBox.setOrientation(LinearLayout.VERTICAL);
+        gridBox.setClipChildren(false);
         gridBox.setPadding(margin + pad, 0, 0, 0);
         column.addView(gridBox, new LinearLayout.LayoutParams(W, ViewGroup.LayoutParams.WRAP_CONTENT));
         LinearLayout row = null;
@@ -496,6 +504,7 @@ public class MainActivity extends Activity {
             if (i % cols == 0) {
                 row = new LinearLayout(this);
                 row.setOrientation(LinearLayout.HORIZONTAL);
+                row.setClipChildren(false);
                 LinearLayout.LayoutParams rl = new LinearLayout.LayoutParams(W, rowH);
                 rl.bottomMargin = rowGap;
                 gridBox.addView(row, rl);

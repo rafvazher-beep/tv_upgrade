@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Huecos del dock y columnas de la cuadricula (4, 5, 6 o 7) -->
+    <integer name="columns">7</integer>
+
+    <!-- Apps del dock, en orden. Si una no esta instalada se omite. -->
+    <string-array name="dock_apps">
+        <item>com.netflix.ninja</item>
+        <item>com.google.android.youtube.tv</item>
+        <item>com.amazon.amazonvideo.livingroom</item>
+        <item>com.disney.disneyplus</item>
+        <item>com.crunchyroll.crunchyroid</item>
+        <item>com.filmin.androidtv</item>
+        <item>com.rtve.androidtv</item>
+    </string-array>
+
+    <!-- Apps que no quieres ver en la cuadricula (nombre de paquete) -->
+    <string-array name="hidden_apps">
+        <item>com.rafa.tvlauncher</item>
+    </string-array>
+</resources>
